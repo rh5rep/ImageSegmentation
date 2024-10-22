@@ -29,10 +29,11 @@ class DRIVE(torch.utils.data.Dataset):
         if self.transform:
             X = self.transform(image)
             Y = self.transform(label)
+
         else:
             X = image
             Y = label
-
+        
         return X, Y
 
 
@@ -102,5 +103,5 @@ class PH2(torch.utils.data.Dataset):
             rois = [self.transform(roi)]
         else:
             rois = [roi]
-
-        return image, lesion, rois
+        
+        return image, lesion
