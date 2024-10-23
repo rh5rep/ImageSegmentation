@@ -19,6 +19,7 @@ class DRIVE(torch.utils.data.Dataset):
         return len(self.image_paths)
 
     def __getitem__(self, idx):
+
         "Generates one sample of data"
         image_path = self.image_paths[idx]
         label_path = self.label_paths[idx]

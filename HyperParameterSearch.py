@@ -2,7 +2,7 @@ import os
 import numpy as np
 import glob
 import PIL.Image as Image
-from tqdm.notebook import tqdm
+from tqdm import tqdm
 from enum import Enum
 import torch
 import torch.nn as nn
@@ -18,6 +18,7 @@ from sklearn.metrics import confusion_matrix
 import itertools
 import random
 from IPython.display import clear_output
+import torch.nn.functional as F
 # from NetworkFineTuning import MultiModel, FineTuneMode, Hotdog_NotHotdog
 
 
@@ -66,25 +67,29 @@ def check_accuracy(model, dataloader, device, batch_size):
             image = image.to(device)
             label = label.to(device)
 
-            scores = model(image)
+            probs = F.sigmoid(model(image))
 
-            _, predictions = scores.max(1)
+            predictions = (probs > 0.5).float()
+            # Flatten tensors to compare pixel by pixel
+            predictions = predictions.view(-1)
+            label = label.view(-1)
 
-            num_correct += (predictions == label).sum()
-            
+            # Accumulate the number of correct pixels
+            num_correct += (predictions == label).sum().item()
+
+            # Accumulate the total number of pixels
             num_pixels += label.numel()
-            y_pred.extend(predictions.cpu().tolist())  # Save Prediction
-            label = label.data.cpu().numpy()
-            y_true.extend(label)  # Save Truth
-    num_pixels *= batch_size
-    accuracy = float(num_correct)/float(num_pixels)
+
+    # Calculate accuracy
+    accuracy = num_correct / num_pixels
+    
     print(
         f"Got {num_correct}/{num_pixels} with accuracy {accuracy * 100:.3f}%\n\n")
     model.train()
     return accuracy
 
 
-def train_mod(model, logger, hyper_parameters, modeltype, device, loss_function, dataloader_train, dataloader_validation, directory):
+def train_mod(model, logger, hyper_parameters, modeltype, device, loss_function, dataloader_train, dataloader_validation, dataloader_test, directory):
 
     optimizer, scheduler = set_optimizer_and_scheduler(hyper_parameters, model)
 
@@ -268,7 +273,7 @@ def hyperparameter_search(model, modeltype, loss_function, device, dataset_train
         # accuracy = automatic_fine_tune(logger, hyper_parameters, modeltype, device,
         #                                loss_function, dataloader_train, dataloader_validation, dataloader_test, log_dir)
         accuracy = train_mod(model, logger, hyper_parameters, modeltype, device,
-                             loss_function, dataloader_train, dataloader_validation, log_dir)
+                             loss_function, dataloader_train, dataloader_validation, dataloader_test, log_dir)
 
         run_counter += 1
 
@@ -282,26 +287,103 @@ def hyperparameter_search(model, modeltype, loss_function, device, dataset_train
 
     return best_hyperparameters
 
-'''
 
-train_transform = transformsV2.Compose([transformsV2.Resize(hyperparameters["image size"]),
-                                        transformsV2.RandomVerticalFlip(p=0.5),
-                                        transformsV2.RandomHorizontalFlip(
-                                            p=0.5),
-                                        transformsV2.RandomAdjustSharpness(
-                                            sharpness_factor=2, p=0.5),
-                                        transformsV2.RandomAutocontrast(p=0.5),
-                                        transformsV2.ColorJitter(
-                                            brightness=0.25, saturation=0.20),
-                                        # Replace deprecated ToTensor()
-                                        transformsV2.ToImage(),
-                                        transformsV2.ToDtype(torch.float32, scale=True)])
-test_transform = transformsV2.Compose([transformsV2.Resize(hyperparameters["image size"]),
-                                       # Replace deprecated ToTensor()
-                                       transformsV2.ToImage(),
-                                       transformsV2.ToDtype(torch.float32, scale=True)])
+if torch.cuda.is_available():
+    print("This code will run on GPU.")
+else:
+    print("The code will run on CPU.")
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-os.environ['TORCH_HOME'] = hyperparameters["torch home"]
-os.makedirs(hyperparameters["torch home"], exist_ok=True)
 
-'''
+transform = transforms.Compose(
+    [
+        transforms.Resize((256, 256)),
+        transforms.ToTensor(),
+    ]
+)
+
+drive_dataset = DRIVE(train=True, transform=transform)
+drive_train_size = int(0.8 * len(drive_dataset))
+drive_val_size = len(drive_dataset) - drive_train_size
+drive_train, drive_val = random_split(drive_dataset, [drive_train_size, drive_val_size])
+drive_test = DRIVE(train=False, transform=transform)
+
+ph2_dataset = PH2(train=True, transform=transform)
+ph2_train_size = int(0.8 * len(ph2_dataset))
+ph2_val_size = len(ph2_dataset) - ph2_train_size
+ph2_train, ph2_val = random_split(ph2_dataset, [ph2_train_size, ph2_val_size])
+ph2_test = PH2(train=False, transform=transform)                    
+
+
+model = EncDec().to(device)
+summary(model, (3, 256, 256))
+
+print("Current working directory:", os.getcwd())
+
+run_dir = "HPSearch"
+os.makedirs(run_dir, exist_ok=True)
+
+# Define the loss function
+loss_function = bce_loss
+results = {}
+
+hyperparameters = {
+    'batch size': 1, 
+    'step size': 5, 
+    'learning rate': 0.001, 
+    'epochs': 20, 
+    'gamma': 0.9, 
+    'momentum': 0.9, 
+    'optimizer': 'Adam', 
+    'number of classes': 2, 
+    'device': device(type='cuda'), 
+    'image size': (256, 256), 
+    'backbone': 'SimpleEncDec', 
+    'torch home': 'TorchvisionModels', 
+    'network name': 'Test-0', 
+    'beta1': 0.9, 
+    'beta2': 0.999, 
+    'epsilon': 1e-08, 
+    'number of workers': 3, 
+    'weight decay': 0.0005, 
+    'scheduler': 'Yes'}
+
+
+
+hyperparameter_grid = {
+    'batch size': [1, 2, 4],
+    'step size': [5, 3, 2],
+    'learning rate': [1e-3, 1e-4, 1e-5],
+    "epochs": [5, 10, 20],
+    'gamma': [0.8, 0.9, 0.7],
+    'momentum': [0.9, 0.95],
+    'optimizer': ['Adam', 'sgd'], 
+    
+}
+
+trainset = ConcatDataset([drive_train, ph2_train])
+# train_loader = torch.utils.data.DataLoader(trainset, batch_size=hyperparameters['batch size'], shuffle=True)
+
+valset = ConcatDataset([drive_val, ph2_val])
+# val_loader = torch.utils.data.DataLoader(valset, batch_size=hyperparameters['batch size'], shuffle=False)
+
+testset = ConcatDataset([drive_test, ph2_test])
+# test_loader = torch.utils.data.DataLoader(testset, batch_size=hyperparameters['batch size'], shuffle=False)
+
+print(f"Created a new Dataset for training of length: {len(trainset)}")
+print(f"Created a new Dataset for validation of length: {len(valset)}")
+print(f"Created a new Dataset for testing of length: {len(testset)}")
+
+# ======================== Hyper parameter search =============================
+
+# Perform hyperparameter search
+samples = create_combinations(hyperparameter_grid)
+
+print(f"Number of combinations: {len(samples)} (amount of models to test)\n\n")
+best_hp = hyperparameter_search(model, hyperparameters["backbone"], loss_function, device, trainset,
+                                valset, testset, samples, hyperparameters, run_dir)
+results[hyperparameters["backbone"]] = best_hp
+print(f"Best hyperparameters for {hyperparameters['backbone']}: {best_hp}")
+
+print(f"\n\nResults: {results}")
+
