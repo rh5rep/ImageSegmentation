@@ -1,34 +1,22 @@
+from cProfile import label
 import os
-import numpy as np
-import glob
-import PIL.Image as Image
+from tkinter import font
 from tqdm import tqdm
 from Dataloader import *
-from torch.utils.data import ConcatDataset
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
-import torchvision.datasets as datasets
 from torch.utils.data import DataLoader
 import torchvision.transforms as transforms
-import matplotlib.pyplot as plt
 from torch.utils.data import random_split
-
-from torchvision import models
 from torchsummary import summary
-import torch.optim as optim
-from time import time
-from IPython.display import clear_output
 from Loss import *
 from torch.utils.tensorboard.writer import SummaryWriter
-# from HyperParameterSearch import *
 from EncDec import EncDec
-import json
 
 def create_tqdm_bar(iterable, desc):
     return tqdm(enumerate(iterable), total=len(iterable), ncols=150, desc=desc)
 
-def train_net(model, logger, hyper_parameters, modeltype, device, loss_function, dataloader_train, dataloader_validation, directory):
+def train_net(model, logger, hyper_parameters, modeltype, device, loss_function, dataloader_train, dataloader_validation, dataloader_test, directory):
 
     optimizer, scheduler = set_optimizer_and_scheduler(hyper_parameters, model)
 
@@ -55,11 +43,8 @@ def train_net(model, logger, hyper_parameters, modeltype, device, loss_function,
         for train_iteration, batch in training_loop:
             optimizer.zero_grad()  # Reset the parameter gradients for the current minibatch iteration
 
-            if len(batch) == 3:
-                images, labels = batch[0], batch[1]
-            else:
-                images, labels = batch
-            labels = labels.type(torch.LongTensor)
+
+            images, labels = batch
 
             labels = labels.to(device)
             images = images.to(device)
@@ -103,8 +88,6 @@ def train_net(model, logger, hyper_parameters, modeltype, device, loss_function,
                 else:
                     images, labels = batch
                     
-                labels = labels.type(torch.LongTensor)
-
                 images = images.to(device)
                 labels = labels.to(device)
 
@@ -151,7 +134,7 @@ def train_net(model, logger, hyper_parameters, modeltype, device, loss_function,
     
     
     # Check accuracy and save model
-    accuracy = check_accuracy(model, dataloader_validation, device, hyper_parameters['batch size'])
+    accuracy = check_accuracy(model, dataloader_test, device, hyper_parameters['batch size'])
     save_dir = os.path.join(directory, f'accuracy_{accuracy:.3f}.pth')
     torch.save(model.state_dict(), save_dir)  # type: ignore
 
@@ -181,19 +164,11 @@ def check_accuracy(model, dataloader, device, batch_size):
     model.eval()
     num_correct = 0
     num_pixels = 0
-    y_true = []
-    y_pred = []
-
-    image,label = [],[]
 
     with torch.no_grad():
         for data in dataloader:
-            
-            if len(data) == 3:
-                image, label = data[0], data[1]
-            else:
-                image, label = data
-            label = label.type(torch.LongTensor)
+        
+            image, label = data
 
             image = image.to(device)
             label = label.to(device)
@@ -257,17 +232,12 @@ run_dir = "Torch_model"
 os.makedirs(run_dir, exist_ok=True)
 
 
-
-# Define the loss function
-loss_function = bce_loss
-results = {}
-
 hyperparameters = {
     'batch size': 1, 
-    'step size': 5, 
+    'step size': 20, 
     'learning rate': 0.001, 
-    'epochs': 20, 
-    'gamma': 0.9, 
+    'epochs': 300, 
+    'gamma': 0.5, 
     'momentum': 0.9, 
     'optimizer': 'Adam', 
     'number of classes': 2, 
@@ -286,18 +256,9 @@ hyperparameters = {
 
 loss_function = bce_loss
 
-trainset = ConcatDataset([drive_train, ph2_train])
-# train_loader = torch.utils.data.DataLoader(trainset, batch_size=hyperparameters['batch size'], shuffle=True)
-
-valset = ConcatDataset([drive_val, ph2_val])
-# val_loader = torch.utils.data.DataLoader(valset, batch_size=hyperparameters['batch size'], shuffle=False)
-
-testset = ConcatDataset([drive_test, ph2_test])
-# test_loader = torch.utils.data.DataLoader(testset, batch_size=hyperparameters['batch size'], shuffle=False)
-
-print(f"Created a new Dataset for training of length: {len(trainset)}")
-print(f"Created a new Dataset for validation of length: {len(valset)}")
-print(f"Created a new Dataset for testing of length: {len(testset)}")
+print(f"Created a new Dataset for training of length: {len(drive_train)}")
+print(f"Created a new Dataset for validation of length: {len(drive_val)}")
+print(f"Created a new Dataset for testing of length: {len(drive_test)}")
 
 
 modeltype = hyperparameters['backbone']
@@ -305,13 +266,13 @@ modeltype_directory = os.path.join(run_dir, f'{modeltype}')
 
 # Initialize model, optimizer, scheduler, logger, dataloader
 dataloader_train = DataLoader(
-    trainset, batch_size=hyperparameters["batch size"], shuffle=True, num_workers=hyperparameters["number of workers"], drop_last=False)
+    drive_train, batch_size=hyperparameters["batch size"], shuffle=True, num_workers=hyperparameters["number of workers"], drop_last=True)
 print(f"Created a new Dataloader for training with batch size: {hyperparameters['batch size']}")
 dataloader_validation = DataLoader(
-    valset, batch_size=hyperparameters["batch size"], shuffle=False, num_workers=hyperparameters["number of workers"], drop_last=False)
+    drive_val, batch_size=hyperparameters["batch size"], shuffle=False, num_workers=hyperparameters["number of workers"], drop_last=False)
 print(f"Created a new Dataloader for validation with batch size: {hyperparameters['batch size']}")
 dataloader_test = DataLoader(
-    testset, batch_size=hyperparameters["batch size"], shuffle=False, num_workers=hyperparameters["number of workers"], drop_last=False)
+    drive_test, batch_size=hyperparameters["batch size"], shuffle=False, num_workers=hyperparameters["number of workers"], drop_last=False)
 print(f"Created a new Dataloader for testing with batch size: {hyperparameters['batch size']}")
 
 log_dir = os.path.join(modeltype_directory, f'{hyperparameters["network name"]}_{hyperparameters["optimizer"]}_Scheduler_{hyperparameters["scheduler"]}')
@@ -320,8 +281,25 @@ logger = SummaryWriter(log_dir)
 
 
 accuracy = train_net(model, logger, hyperparameters, hyperparameters['backbone'], device,
-                             loss_function, dataloader_train, dataloader_validation, log_dir)
-print(f"Accuracy on validation set {accuracy}")
+                             loss_function, dataloader_train, dataloader_validation, dataloader_test, log_dir)
+print(f"Accuracy on test set {accuracy}")
 
 
 
+
+# Just to save a sample image and its prediction
+""" Note: The test set has white masks for the ground truth images, also the losses don't go lower than 0.25 """
+import matplotlib.pyplot as plt
+
+model.eval()
+i, l = next(iter(dataloader_test))
+out = model(i.to(device))
+fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+
+axes[0].imshow(out[0].cpu().detach().numpy()[0], cmap='gray')
+axes[0].axis('off')
+axes[0].set_title("Output image", fontweight='bold')
+axes[1].imshow(l.squeeze().cpu().detach().numpy(), cmap='gray')
+axes[1].axis('off')
+axes[1].set_title("Ground truth image", fontweight='bold')
+plt.savefig("combined_sample.png")
