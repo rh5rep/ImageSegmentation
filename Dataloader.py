@@ -12,7 +12,14 @@ class DRIVE(torch.utils.data.Dataset):
         base_path = "/dtu/datasets1/02516/DRIVE/"
         data_path = os.path.join(base_path, "training" if train else "test")
         self.image_paths = sorted(glob.glob(os.path.join(data_path, "images", "*.tif")))
-        self.label_paths = sorted(glob.glob(os.path.join(data_path, "1st_manual", "*.gif")))
+        
+        if train:
+            self.label_paths = sorted(glob.glob(os.path.join(data_path, "1st_manual", "*.gif")))
+        else:
+            self.label_paths = sorted(glob.glob(os.path.join(data_path, "mask", "*.gif")))
+                                      
+        # Debugging: Check if the number of images and labels match
+        print(f"Found {len(self.image_paths)} images and {len(self.label_paths)} labels.")
 
     def __len__(self):
         "Returns the total number of samples"
