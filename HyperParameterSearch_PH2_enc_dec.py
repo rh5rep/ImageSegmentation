@@ -31,8 +31,6 @@ def sample_hyperparameters(hyperparameter_grid, num_samples):
         samples.append(sample)
     return samples
 
-
-# TODO: Test out this as the numbers are the same every time for some reason
 def check_accuracy(model, dataloader, device, batch_size):
     model.eval()
     num_correct = 0
@@ -217,7 +215,8 @@ def hyperparameter_search(model, modeltype, device, dataset_train, dataset_valid
     best_performance = 0
     best_hyperparameters = None
     run_counter = 0
-    modeltype_directory = os.path.join(run_dir, f'{modeltype}')
+    modeltype_directory = os.path.join(run_dir, "PH2")
+    modeltype_directory = os.path.join(modeltype_directory, f'{modeltype}')
     for hyper_parameters in hyperparameter_grid:
         # Empty memory before start
         if torch.cuda.is_available():
@@ -303,6 +302,7 @@ hyperparameters = {
     'backbone': 'SimpleEncDec', 
     'torch home': 'TorchvisionModels', 
     'network name': 'Test-0', 
+    'dataset': 'PH2',
     'beta1': 0.9, 
     'beta2': 0.999, 
     'epsilon': 1e-08, 
