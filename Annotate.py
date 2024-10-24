@@ -1,7 +1,6 @@
 from Dataloader import *
 from torch.utils.data import DataLoader
 import numpy as np
-import torch
 import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
 from PIL import Image, ImageDraw
@@ -18,7 +17,7 @@ ph2_loader = DataLoader(ph2_dataset, batch_size=1, shuffle=True)
 
 # Add Weak Supervision to Images 
 def add_weak(image, lesion, num_positive, num_negative, dot_radius=5):
-    height, width = image.shape[2], image.shape[3]
+    # height, width = image.shape[2], image.shape[3]
     image_np = image[0].permute(1, 2, 0).numpy()  # Convert to HxWxC
     lesion_np = lesion[0].squeeze().numpy()  # Convert lesion mask to HxW
     image_pil = Image.fromarray((image_np * 255).astype(np.uint8))  # Convert to PIL Image
@@ -30,7 +29,7 @@ def add_weak(image, lesion, num_positive, num_negative, dot_radius=5):
 
     # Add positive labels
     if lesion_coords[0].size > 0:
-        for i in range(num_positive):
+        for _ in range(num_positive):
             idx = np.random.randint(0, lesion_coords[0].size)
             x = lesion_coords[1][idx]
             y = lesion_coords[0][idx]
@@ -38,7 +37,7 @@ def add_weak(image, lesion, num_positive, num_negative, dot_radius=5):
 
     # Add negative labels
     if background_coords[0].size > 0:
-        for i in range(num_negative):
+        for _ in range(num_negative):
             idx = np.random.randint(0, background_coords[0].size)
             x = background_coords[1][idx]
             y = background_coords[0][idx]

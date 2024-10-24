@@ -9,7 +9,7 @@ from torch.utils.data import random_split
 from torchsummary import summary
 from Loss import *
 from torch.utils.tensorboard.writer import SummaryWriter
-from EncDec import EncDec
+from UNet import UNet
 
 def create_tqdm_bar(iterable, desc):
     return tqdm(enumerate(iterable), total=len(iterable), ncols=150, desc=desc)
@@ -208,18 +208,20 @@ transform = transforms.Compose(
     ]
 )
 
+drive_dataset = DRIVE(transform=transform)
+print(f"The dataset has {len(drive_dataset)} images.")
+drive_train_size = int(0.7 * len(drive_dataset))
+drive_val_size = int(0.2 * len(drive_dataset))
+drive_test_size = len(drive_dataset) - drive_train_size - drive_val_size
 
-ph2_dataset = PH2(train=True, transform=transform)
-ph2_train_size = int(0.8 * len(ph2_dataset))
-ph2_val_size = len(ph2_dataset) - ph2_train_size
-ph2_train, ph2_val = random_split(ph2_dataset, [ph2_train_size, ph2_val_size])
-ph2_test = PH2(train=False, transform=transform)                    
+drive_train, drive_val, drive_test = random_split(
+    drive_dataset, [drive_train_size, drive_val_size, drive_test_size])
 
-print(f"Created a new Dataset for training of length: {len(ph2_train)}")
-print(f"Created a new Dataset for validation of length: {len(ph2_val)}")
-print(f"Created a new Dataset for testing of length: {len(ph2_test)}")
+print(f"Created a new Dataset for training of length: {len(drive_train)}")
+print(f"Created a new Dataset for validation of length: {len(drive_val)}")
+print(f"Created a new Dataset for testing of length: {len(drive_test)}")
 
-model = EncDec().to(device)
+model = UNet(num_classes=1).to(device)
 summary(model, (3, 256, 256))
 
 print("Current working directory:", os.getcwd())
@@ -229,11 +231,11 @@ os.makedirs(run_dir, exist_ok=True)
 
 
 hyperparameters = {
-    'batch size': 20, 
+    'batch size': 4, 
     'step size': 20, 
     'learning rate': 0.001, 
-    'epochs': 100, 
-    'gamma': 0.8, 
+    'epochs': 160, 
+    'gamma': 0.5, 
     'momentum': 0.9, 
     'optimizer': 'Adam', 
     'number of classes': 2, 
@@ -250,11 +252,11 @@ hyperparameters = {
     'scheduler': 'Yes'
 }
 
-loss_function = dice_loss
+loss_function = bce_loss
 
-print(f"Created a new Dataset for training of length: {len(ph2_train)}")
-print(f"Created a new Dataset for validation of length: {len(ph2_val)}")
-print(f"Created a new Dataset for testing of length: {len(ph2_test)}")
+print(f"Created a new Dataset for training of length: {len(drive_train)}")
+print(f"Created a new Dataset for validation of length: {len(drive_val)}")
+print(f"Created a new Dataset for testing of length: {len(drive_test)}")
 
 
 modeltype = hyperparameters['backbone']
@@ -262,13 +264,13 @@ modeltype_directory = os.path.join(run_dir, f'{modeltype}')
 
 # Initialize model, optimizer, scheduler, logger, dataloader
 dataloader_train = DataLoader(
-    ph2_train, batch_size=hyperparameters["batch size"], shuffle=True, num_workers=hyperparameters["number of workers"], drop_last=True)
+    drive_train, batch_size=hyperparameters["batch size"], shuffle=True, num_workers=hyperparameters["number of workers"], drop_last=True)
 print(f"Created a new Dataloader for training with batch size: {hyperparameters['batch size']}")
 dataloader_validation = DataLoader(
-    ph2_val, batch_size=1, shuffle=False, num_workers=hyperparameters["number of workers"], drop_last=False)
+    drive_val, batch_size=1, shuffle=False, num_workers=hyperparameters["number of workers"], drop_last=False)
 print(f"Created a new Dataloader for validation with batch size: {hyperparameters['batch size']}")
 dataloader_test = DataLoader(
-    ph2_test, batch_size=1, shuffle=False, num_workers=hyperparameters["number of workers"], drop_last=False)
+    drive_test, batch_size=1, shuffle=False, num_workers=hyperparameters["number of workers"], drop_last=False)
 print(f"Created a new Dataloader for testing with batch size: {hyperparameters['batch size']}")
 
 log_dir = os.path.join(modeltype_directory, f'{hyperparameters["network name"]}_{hyperparameters["optimizer"]}_Scheduler_{hyperparameters["scheduler"]}')
@@ -295,4 +297,4 @@ axes[0].set_title("Output image", fontweight='bold')
 axes[1].imshow(l.squeeze().cpu().detach().numpy(), cmap='gray')
 axes[1].axis('off')
 axes[1].set_title("Ground truth image", fontweight='bold')
-plt.savefig("combined_sample_PH2.png")
+plt.savefig("combined_sample_DRIVE_Unet.png")
