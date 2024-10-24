@@ -1,20 +1,76 @@
 import os
 from tqdm import tqdm
-from Dataloader import *
 import torch
-import torch.nn.functional as F
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, random_split
 import torchvision.transforms.v2 as transforms
-from torch.utils.data import random_split
+from torch.utils.tensorboard.writer import SummaryWriter
+import itertools
+import random
+import torch.nn.functional as F
+from Dataloader import *
+from UNet import UNet
 from torchsummary import summary
 from Loss import *
-from torch.utils.tensorboard.writer import SummaryWriter
-from EncDec import EncDec
+
 
 def create_tqdm_bar(iterable, desc):
     return tqdm(enumerate(iterable), total=len(iterable), ncols=150, desc=desc)
 
-def train_net(model, logger, hyper_parameters, modeltype, device, loss_function, dataloader_train, dataloader_validation, dataloader_test, directory):
+# Function to create all combinations of hyperparameters
+def create_combinations(hyperparameter_grid):
+    keys, values = zip(*hyperparameter_grid.items())
+    return [dict(zip(keys, v)) for v in itertools.product(*values)]
+
+# Function to randomly sample hyperparameters
+def sample_hyperparameters(hyperparameter_grid, num_samples):
+    samples = []
+    for _ in range(num_samples):
+        sample = {}
+        for key, values in hyperparameter_grid.items():
+            sample[key] = random.choice(values)
+        samples.append(sample)
+    return samples
+
+
+# TODO: Test out this as the numbers are the same every time for some reason
+def check_accuracy(model, dataloader, device, batch_size):
+    model.eval()
+    num_correct = 0
+    num_pixels = 0
+
+    image,label = [], []
+
+    with torch.no_grad():
+        for data in dataloader:
+
+            image, label = data
+
+            image = image.to(device)
+            label = label.to(device)
+
+            probs = F.sigmoid(model(image))
+
+            predictions = (probs > 0.5).float()
+            # Flatten tensors to compare pixel by pixel
+            predictions = predictions.view(-1)
+            label = label.view(-1)
+
+            # Accumulate the number of correct pixels
+            num_correct += (predictions == label).sum().item()
+
+            # Accumulate the total number of pixels
+            num_pixels += label.numel()
+
+    # Calculate accuracy
+    accuracy = num_correct / num_pixels
+    
+    print(
+        f"Got {num_correct}/{num_pixels} with accuracy {accuracy * 100:.3f}%\n\n")
+    model.train()
+    return accuracy
+
+
+def train_mod(model, logger, hyper_parameters, modeltype, device, loss_function, dataloader_train, dataloader_validation, dataloader_test, directory):
 
     optimizer, scheduler = set_optimizer_and_scheduler(hyper_parameters, model)
 
@@ -25,7 +81,7 @@ def train_net(model, logger, hyper_parameters, modeltype, device, loss_function,
     all_accuracies = []
     validation_loss = 0
 
-    images,labels = [],[]
+    images,labels = [], []
 
     for epoch in range(epochs):  # loop over the dataset multiple times
 
@@ -40,7 +96,6 @@ def train_net(model, logger, hyper_parameters, modeltype, device, loss_function,
         
         for train_iteration, batch in training_loop:
             optimizer.zero_grad()  # Reset the parameter gradients for the current minibatch iteration
-
 
             images, labels = batch
 
@@ -81,10 +136,8 @@ def train_net(model, logger, hyper_parameters, modeltype, device, loss_function,
         with torch.no_grad():
             for val_iteration, batch in val_loop:
                 
-                if len(batch) == 3:
-                    images, labels = batch[0], batch[1]
-                else:
-                    images, labels = batch
+
+                images, labels = batch
                     
                 images = images.to(device)
                 labels = labels.to(device)
@@ -117,14 +170,14 @@ def train_net(model, logger, hyper_parameters, modeltype, device, loss_function,
 
     if scheduler is not None:
         logger.add_hparams(
-            {f"Step_size": scheduler.step_size, f'Batch_size': hyper_parameters["batch size"], f'Optimizer': hyper_parameters["optimizer"], f'Scheduler': hyper_parameters["scheduler"]},
+            {f"Step_size": scheduler.step_size, f'Batch_size': hyper_parameters["batch size"], f'Optimizer': hyper_parameters["optimizer"], f'Scheduler': hyper_parameters["scheduler"], f'Loss function': hyper_parameters["loss"].__name__},
             {f'Avg train loss': sum(all_train_losses)/len(all_train_losses),
                 f'Avg accuracy': sum(all_accuracies)/len(all_accuracies),
                 f'Avg val loss': sum(all_val_losses)/len(all_val_losses)}
         )
     else:
         logger.add_hparams(
-            {f"Step_size": "None", f'Batch_size': hyper_parameters["batch size"], f'Optimizer': hyper_parameters["optimizer"], f'Scheduler': hyper_parameters["scheduler"]},
+            {f"Step_size": "None", f'Batch_size': hyper_parameters["batch size"], f'Optimizer': hyper_parameters["optimizer"], f'Scheduler': hyper_parameters["scheduler"], f'Loss function': hyper_parameters["loss"].__name__},
             {f'Avg train loss': sum(all_train_losses)/len(all_train_losses),
                 f'Avg accuracy': sum(all_accuracies)/len(all_accuracies),
                 f'Avg val loss': sum(all_val_losses)/len(all_val_losses)}
@@ -137,6 +190,7 @@ def train_net(model, logger, hyper_parameters, modeltype, device, loss_function,
     torch.save(model.state_dict(), save_dir)  # type: ignore
 
     return accuracy
+
 
 def set_optimizer_and_scheduler(new_hp, model):
     if new_hp["optimizer"] == "Adam":
@@ -158,40 +212,51 @@ def set_optimizer_and_scheduler(new_hp, model):
         scheduler = None
     return optimizer, scheduler
 
-def check_accuracy(model, dataloader, device, batch_size):
-    model.eval()
-    num_correct = 0
-    num_pixels = 0
 
-    with torch.no_grad():
-        for data in dataloader:
+def hyperparameter_search(model, modeltype, device, dataset_train, dataset_validation, dataset_test, hyperparameter_grid, missing_hp, run_dir):
+    best_performance = 0
+    best_hyperparameters = None
+    run_counter = 0
+    modeltype_directory = os.path.join(run_dir, f'{modeltype}')
+    for hyper_parameters in hyperparameter_grid:
+        # Empty memory before start
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+        print(f"Current hyper parameters: {hyper_parameters}")
+        hyper_parameters.update(missing_hp)
+        # Initialize model, optimizer, scheduler, logger, dataloader
+        dataloader_train = DataLoader(
+            dataset_train, batch_size=hyper_parameters["batch size"], shuffle=True, num_workers=hyper_parameters["number of workers"], drop_last=True)
+        print(f"Created a new Dataloader for training with batch size: {hyper_parameters['batch size']}")
+        dataloader_validation = DataLoader(
+            dataset_validation, batch_size=hyper_parameters["batch size"], shuffle=False, num_workers=hyper_parameters["number of workers"], drop_last=False)
+        print(f"Created a new Dataloader for validation with batch size: {hyper_parameters['batch size']}")
+        dataloader_test = DataLoader(
+            dataset_test, batch_size=1, shuffle=False, num_workers=hyper_parameters["number of workers"], drop_last=False)
+        print(f"Created a new Dataloader for testing with batch size: {hyper_parameters['batch size']}")
+
+        log_dir = os.path.join(modeltype_directory, f'run_{str(run_counter)}_{hyper_parameters["network name"]}_{hyper_parameters["optimizer"]}_Scheduler_{hyper_parameters["scheduler"]}')
+        os.makedirs(log_dir, exist_ok=True)
+        logger = SummaryWriter(log_dir)
+
+        # Define the loss function
+        loss_function = hyper_parameters["loss"]
         
-            image, label = data
+        accuracy = train_mod(model, logger, hyper_parameters, modeltype, device,
+                             loss_function, dataloader_train, dataloader_validation, dataloader_test, log_dir)
 
-            image = image.to(device)
-            label = label.to(device)
+        run_counter += 1
 
-            probs = F.sigmoid(model(image))
+        # Update best hyperparameters if the current model has better performance
+        if accuracy > best_performance:
+            best_performance = accuracy
+            best_hyperparameters = hyper_parameters
 
-            predictions = (probs > 0.5).float()
-            # Flatten tensors to compare pixel by pixel
-            predictions = predictions.view(-1)
-            label = label.view(-1)
+        logger.close()
+    print(f"\n\n############### Finished hyperparameter search! ###############")
 
-            # Accumulate the number of correct pixels
-            num_correct += (predictions == label).sum().item()
-
-            # Accumulate the total number of pixels
-            num_pixels += label.numel()
-
-    # Calculate accuracy
-    accuracy = num_correct / num_pixels
-    
-    print(
-        f"Got {num_correct}/{num_pixels} with accuracy {accuracy * 100:.3f}%\n\n")
-    model.train()
-    return accuracy
-
+    return best_hyperparameters
 
 
 if torch.cuda.is_available():
@@ -220,82 +285,54 @@ drive_train, drive_val, drive_test = random_split(
 
 print(f"Created a new Dataset for training of length: {len(drive_train)}")
 print(f"Created a new Dataset for validation of length: {len(drive_val)}")
-print(f"Created a new Dataset for testing of length: {len(drive_test)}")
+print(f"Created a new Dataset for testing of length: {len(drive_test)}")         
 
-model = EncDec().to(device)
+
+model = UNet(num_classes=1).to(device)
 summary(model, (3, 256, 256))
 
 print("Current working directory:", os.getcwd())
 
-run_dir = "Torch_model"
+run_dir = "HPSearch"
 os.makedirs(run_dir, exist_ok=True)
 
 
+results = {}
+
 hyperparameters = {
-    'batch size': 4, 
-    'step size': 20, 
-    'learning rate': 0.001, 
-    'epochs': 160, 
-    'gamma': 0.5, 
-    'momentum': 0.9, 
-    'optimizer': 'Adam', 
-    'number of classes': 2, 
-    'device': 'cuda', 
+    'device': device, 
     'image size': (256, 256), 
-    'backbone': 'SimpleEncDec', 
+    'backbone': 'Unet', 
     'torch home': 'TorchvisionModels', 
     'network name': 'Test-0', 
     'beta1': 0.9, 
     'beta2': 0.999, 
     'epsilon': 1e-08, 
     'number of workers': 3, 
-    'weight decay': 0.0005, 
-    'scheduler': 'Yes'
-}
+    'weight decay': 0.0005
+    }
 
-loss_function = bce_loss
-
-print(f"Created a new Dataset for training of length: {len(drive_train)}")
-print(f"Created a new Dataset for validation of length: {len(drive_val)}")
-print(f"Created a new Dataset for testing of length: {len(drive_test)}")
-
-
-modeltype = hyperparameters['backbone']
-modeltype_directory = os.path.join(run_dir, f'{modeltype}')
-
-# Initialize model, optimizer, scheduler, logger, dataloader
-dataloader_train = DataLoader(
-    drive_train, batch_size=hyperparameters["batch size"], shuffle=True, num_workers=hyperparameters["number of workers"], drop_last=True)
-print(f"Created a new Dataloader for training with batch size: {hyperparameters['batch size']}")
-dataloader_validation = DataLoader(
-    drive_val, batch_size=hyperparameters["batch size"], shuffle=False, num_workers=hyperparameters["number of workers"], drop_last=False)
-print(f"Created a new Dataloader for validation with batch size: {hyperparameters['batch size']}")
-dataloader_test = DataLoader(
-    drive_test, batch_size=1, shuffle=False, num_workers=hyperparameters["number of workers"], drop_last=False)
-print(f"Created a new Dataloader for testing with batch size: {hyperparameters['batch size']}")
-
-log_dir = os.path.join(modeltype_directory, f'{hyperparameters["network name"]}_{hyperparameters["optimizer"]}_Scheduler_{hyperparameters["scheduler"]}')
-os.makedirs(log_dir, exist_ok=True)
-logger = SummaryWriter(log_dir)
+hyperparameter_grid = {
+    'batch size': [1, 2, 4],
+    'step size': [5, 3, 2],
+    'learning rate': [1e-3, 1e-4, 1e-5],
+    "epochs": [5, 1, 2],
+    'gamma': [0.8, 0.9, 0.7],
+    'momentum': [0.9, 0.95],
+    'optimizer': ['Adam', 'SGD'],
+    'loss': [bce_loss, dice_loss], 
+    'scheduler': ['Yes', 'No']
+    }
 
 
-accuracy = train_net(model, logger, hyperparameters, hyperparameters['backbone'], device,
-                             loss_function, dataloader_train, dataloader_validation, dataloader_test, log_dir)
+# ======================== Hyper parameter search =============================
 
+# samples = create_combinations(hyperparameter_grid)
+samples = sample_hyperparameters(hyperparameter_grid, 3)
 
+print(f"Number of combinations: {len(samples)} (amount of models to test)\n\n")
+best_hp = hyperparameter_search(model, hyperparameters["backbone"], device, drive_train, drive_val, drive_test, samples, hyperparameters, run_dir)
+results[hyperparameters["backbone"]] = best_hp
+print(f"Best hyperparameters for {hyperparameters['backbone']}: {best_hp}")
 
-# Just to save a sample image and its prediction
-import matplotlib.pyplot as plt
-
-model.eval()
-i, l = next(iter(dataloader_test))
-out = model(i.to(device))
-fig, axes = plt.subplots(1, 2, figsize=(10, 5))
-
-axes[0].imshow(out[0].cpu().detach().numpy()[0], cmap='gray')
-axes[0].axis('off')
-axes[0].set_title("Output image", fontweight='bold')
-axes[1].imshow(l.squeeze().cpu().detach().numpy(), cmap='gray')
-axes[1].axis('off')
-axes[1].set_title("Ground truth image", fontweight='bold')
-plt.savefig("combined_sample_DRIVE_enc_dec.png")
+print(f"\n\nResults: {results}")

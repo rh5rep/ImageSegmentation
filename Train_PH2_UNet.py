@@ -4,7 +4,7 @@ from Dataloader import *
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
-import torchvision.transforms as transforms
+import torchvision.transforms.v2 as transforms
 from torch.utils.data import random_split
 from torchsummary import summary
 from Loss import *
@@ -204,7 +204,8 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 transform = transforms.Compose(
     [
         transforms.Resize((256, 256)),
-        transforms.ToTensor(),
+        transforms.ToImage(),                         
+        transforms.ToDtype(torch.float32, scale=True), 
     ]
 )
 
@@ -265,7 +266,7 @@ dataloader_train = DataLoader(
     ph2_train, batch_size=hyperparameters["batch size"], shuffle=True, num_workers=hyperparameters["number of workers"], drop_last=True)
 print(f"Created a new Dataloader for training with batch size: {hyperparameters['batch size']}")
 dataloader_validation = DataLoader(
-    ph2_val, batch_size=1, shuffle=False, num_workers=hyperparameters["number of workers"], drop_last=False)
+    ph2_val, batch_size=hyperparameters["batch size"], shuffle=False, num_workers=hyperparameters["number of workers"], drop_last=False)
 print(f"Created a new Dataloader for validation with batch size: {hyperparameters['batch size']}")
 dataloader_test = DataLoader(
     ph2_test, batch_size=1, shuffle=False, num_workers=hyperparameters["number of workers"], drop_last=False)
