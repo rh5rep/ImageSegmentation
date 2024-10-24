@@ -1,6 +1,4 @@
-from cProfile import label
 import os
-from tkinter import font
 from tqdm import tqdm
 from Dataloader import *
 import torch
@@ -210,11 +208,6 @@ transform = transforms.Compose(
     ]
 )
 
-drive_dataset = DRIVE(train=True, transform=transform)
-drive_train_size = int(0.8 * len(drive_dataset))
-drive_val_size = len(drive_dataset) - drive_train_size
-drive_train, drive_val = random_split(drive_dataset, [drive_train_size, drive_val_size])
-drive_test = DRIVE(train=False, transform=transform)
 
 ph2_dataset = PH2(train=True, transform=transform)
 ph2_train_size = int(0.8 * len(ph2_dataset))
@@ -222,6 +215,9 @@ ph2_val_size = len(ph2_dataset) - ph2_train_size
 ph2_train, ph2_val = random_split(ph2_dataset, [ph2_train_size, ph2_val_size])
 ph2_test = PH2(train=False, transform=transform)                    
 
+print(f"Created a new Dataset for training of length: {len(ph2_train)}")
+print(f"Created a new Dataset for validation of length: {len(ph2_val)}")
+print(f"Created a new Dataset for testing of length: {len(ph2_test)}")
 
 model = EncDec().to(device)
 summary(model, (3, 256, 256))
@@ -233,11 +229,11 @@ os.makedirs(run_dir, exist_ok=True)
 
 
 hyperparameters = {
-    'batch size': 1, 
+    'batch size': 20, 
     'step size': 20, 
     'learning rate': 0.001, 
-    'epochs': 300, 
-    'gamma': 0.5, 
+    'epochs': 100, 
+    'gamma': 0.8, 
     'momentum': 0.9, 
     'optimizer': 'Adam', 
     'number of classes': 2, 
@@ -254,11 +250,11 @@ hyperparameters = {
     'scheduler': 'Yes'
 }
 
-loss_function = bce_loss
+loss_function = dice_loss
 
-print(f"Created a new Dataset for training of length: {len(drive_train)}")
-print(f"Created a new Dataset for validation of length: {len(drive_val)}")
-print(f"Created a new Dataset for testing of length: {len(drive_test)}")
+print(f"Created a new Dataset for training of length: {len(ph2_train)}")
+print(f"Created a new Dataset for validation of length: {len(ph2_val)}")
+print(f"Created a new Dataset for testing of length: {len(ph2_test)}")
 
 
 modeltype = hyperparameters['backbone']
@@ -266,13 +262,13 @@ modeltype_directory = os.path.join(run_dir, f'{modeltype}')
 
 # Initialize model, optimizer, scheduler, logger, dataloader
 dataloader_train = DataLoader(
-    drive_train, batch_size=hyperparameters["batch size"], shuffle=True, num_workers=hyperparameters["number of workers"], drop_last=True)
+    ph2_train, batch_size=hyperparameters["batch size"], shuffle=True, num_workers=hyperparameters["number of workers"], drop_last=True)
 print(f"Created a new Dataloader for training with batch size: {hyperparameters['batch size']}")
 dataloader_validation = DataLoader(
-    drive_val, batch_size=hyperparameters["batch size"], shuffle=False, num_workers=hyperparameters["number of workers"], drop_last=False)
+    ph2_val, batch_size=1, shuffle=False, num_workers=hyperparameters["number of workers"], drop_last=False)
 print(f"Created a new Dataloader for validation with batch size: {hyperparameters['batch size']}")
 dataloader_test = DataLoader(
-    drive_test, batch_size=hyperparameters["batch size"], shuffle=False, num_workers=hyperparameters["number of workers"], drop_last=False)
+    ph2_test, batch_size=1, shuffle=False, num_workers=hyperparameters["number of workers"], drop_last=False)
 print(f"Created a new Dataloader for testing with batch size: {hyperparameters['batch size']}")
 
 log_dir = os.path.join(modeltype_directory, f'{hyperparameters["network name"]}_{hyperparameters["optimizer"]}_Scheduler_{hyperparameters["scheduler"]}')
@@ -282,13 +278,10 @@ logger = SummaryWriter(log_dir)
 
 accuracy = train_net(model, logger, hyperparameters, hyperparameters['backbone'], device,
                              loss_function, dataloader_train, dataloader_validation, dataloader_test, log_dir)
-print(f"Accuracy on test set {accuracy}")
-
 
 
 
 # Just to save a sample image and its prediction
-""" Note: The test set has white masks for the ground truth images, also the losses don't go lower than 0.25 """
 import matplotlib.pyplot as plt
 
 model.eval()
@@ -302,4 +295,4 @@ axes[0].set_title("Output image", fontweight='bold')
 axes[1].imshow(l.squeeze().cpu().detach().numpy(), cmap='gray')
 axes[1].axis('off')
 axes[1].set_title("Ground truth image", fontweight='bold')
-plt.savefig("combined_sample.png")
+plt.savefig("combined_sample_PH2.png")
