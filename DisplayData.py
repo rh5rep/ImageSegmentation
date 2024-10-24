@@ -11,7 +11,7 @@ transform = transforms.Compose(
     ]
 )
 
-drive_dataset = DRIVE(train=True, transform=transform)
+drive_dataset = DRIVE(transform=transform)
 drive_loader = torch.utils.data.DataLoader(drive_dataset, batch_size=1, shuffle=True)
 
 for index, (images, masks) in enumerate(drive_loader):

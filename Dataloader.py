@@ -6,17 +6,15 @@ from sklearn.model_selection import train_test_split
 
 
 class DRIVE(torch.utils.data.Dataset):
-    def __init__(self, train, transform):
+    def __init__(self, transform):
         "Initialization"
         self.transform = transform
         base_path = "/dtu/datasets1/02516/DRIVE/"
-        data_path = os.path.join(base_path, "training" if train else "test")
+        data_path = os.path.join(base_path, "training")
         self.image_paths = sorted(glob.glob(os.path.join(data_path, "images", "*.tif")))
         
-        if train:
-            self.label_paths = sorted(glob.glob(os.path.join(data_path, "1st_manual", "*.gif")))
-        else:
-            self.label_paths = sorted(glob.glob(os.path.join(data_path, "mask", "*.gif")))
+        self.label_paths = sorted(glob.glob(os.path.join(data_path, "1st_manual", "*.gif")))
+       
                                       
         # Debugging: Check if the number of images and labels match
         print(f"Found {len(self.image_paths)} images and {len(self.label_paths)} labels.")
