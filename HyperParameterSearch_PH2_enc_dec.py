@@ -325,8 +325,8 @@ hyperparameter_grid = {
 
 # ======================== Hyper parameter search =============================
 
-# samples = create_combinations(hyperparameter_grid)
-samples = sample_hyperparameters(hyperparameter_grid, 3)
+samples = create_combinations(hyperparameter_grid)
+# samples = sample_hyperparameters(hyperparameter_grid, 3)
 
 print(f"Number of combinations: {len(samples)} (amount of models to test)\n\n")
 best_hp = hyperparameter_search(model, hyperparameters["backbone"], device, ph2_train, ph2_val, ph2_test, samples, hyperparameters, run_dir)
