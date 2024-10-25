@@ -306,7 +306,7 @@ hyperparameters = {
     'beta1': 0.9, 
     'beta2': 0.999, 
     'epsilon': 1e-08, 
-    'number of workers': 3, 
+    'number of workers': 2, 
     'weight decay': 0.0005,
     'epochs': 50,
     'optimizer': 'Adam',
