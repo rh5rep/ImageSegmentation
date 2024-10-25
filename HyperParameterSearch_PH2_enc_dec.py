@@ -301,25 +301,25 @@ hyperparameters = {
     'image size': (256, 256), 
     'backbone': 'SimpleEncDec', 
     'torch home': 'TorchvisionModels', 
-    'network name': 'Test-0', 
+    'network name': 'HP_Search_PH2_enc_dec_1', 
     'dataset': 'PH2',
     'beta1': 0.9, 
     'beta2': 0.999, 
     'epsilon': 1e-08, 
     'number of workers': 3, 
-    'weight decay': 0.0005
+    'weight decay': 0.0005,
+    'epochs': 60,
+    'optimizer': 'Adam',
+    'scheduler': 'Yes',
+    'momentum': 0.9, # Not used since SDG is not used
     }
 
 hyperparameter_grid = {
-    'batch size': [1, 2, 4],
-    'step size': [5, 3, 2],
+    'batch size': [8, 16, 32, 64],
+    'step size': [5, 10, 20],
     'learning rate': [1e-3, 1e-4, 1e-5],
-    "epochs": [5, 1, 2],
     'gamma': [0.8, 0.9, 0.7],
-    'momentum': [0.9, 0.95],
-    'optimizer': ['Adam', 'SGD'],
-    'loss': [bce_loss, dice_loss], 
-    'scheduler': ['Yes', 'No']
+    'loss': [dice_overlap, intersection_over_union, accuracy, sensitivity, specificity], 
     }
 
 
