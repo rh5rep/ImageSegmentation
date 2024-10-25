@@ -311,7 +311,7 @@ hyperparameters = {
     'epsilon': 1e-08, 
     'number of workers': 3, 
     'weight decay': 0.0005,
-    'epochs': 60,
+    'epochs': 70,
     'optimizer': 'Adam',
     'scheduler': 'Yes',
     'momentum': 0.9, # Not used since SDG is not used
@@ -320,8 +320,8 @@ hyperparameters = {
 hyperparameter_grid = {
     'batch size': [1, 2, 4],
     'step size': [5, 10, 20],
-    'learning rate': [1e-3, 1e-4, 1e-5],
-    'gamma': [0.8, 0.9, 0.7],
+    'learning rate': [1e-2, 1e-3, 1e-4],
+    'gamma': [0.8, 0.9],
     'loss': [bce_loss, dice_loss], 
     }
 
