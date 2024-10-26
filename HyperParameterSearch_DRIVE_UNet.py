@@ -321,7 +321,7 @@ hyperparameter_grid = {
     'step size': [5, 10, 20],
     'learning rate': [1e-2, 1e-3, 1e-4],
     'gamma': [0.8, 0.9],
-    'loss': [bce_loss, dice_loss], 
+    'loss': [bce_loss, dice_loss, cross_entropy_loss, cross_entropy_weighted_loss, focal_loss], 
     }
 
 
