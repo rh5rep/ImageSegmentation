@@ -29,3 +29,5 @@ def focal_loss(y_real, y_pred, gamma_2=2.0):
     focal_loss = - (1 - pt) ** gamma_2 * torch.log(pt + 1e-8)
     
     return torch.mean(focal_loss)
+
+# Test
