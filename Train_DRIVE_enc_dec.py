@@ -234,7 +234,7 @@ os.makedirs(run_dir, exist_ok=True)
 hyperparameters = {
     'batch size': 1, 
     'step size': 5, 
-    'learning rate': 0.01, 
+    'learning rate': 0.001, 
     'epochs': 200, 
     'gamma': 0.5, 
     'momentum': 0.8, 
