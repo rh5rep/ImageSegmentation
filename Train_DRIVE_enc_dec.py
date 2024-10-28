@@ -232,12 +232,12 @@ os.makedirs(run_dir, exist_ok=True)
 
 
 hyperparameters = {
-    'batch size': 4, 
-    'step size': 20, 
-    'learning rate': 0.001, 
+    'batch size': 1, 
+    'step size': 5, 
+    'learning rate': 0.01, 
     'epochs': 160, 
     'gamma': 0.5, 
-    'momentum': 0.9, 
+    'momentum': 0.8, 
     'optimizer': 'Adam', 
     'number of classes': 2, 
     'device': 'cuda', 

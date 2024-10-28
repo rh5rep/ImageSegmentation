@@ -230,9 +230,9 @@ os.makedirs(run_dir, exist_ok=True)
 
 
 hyperparameters = {
-    'batch size': 20, 
-    'step size': 20, 
-    'learning rate': 0.001, 
+    'batch size': 8, 
+    'step size': 5, 
+    'learning rate': 0.01, 
     'epochs': 100, 
     'gamma': 0.8, 
     'momentum': 0.9, 
@@ -251,7 +251,7 @@ hyperparameters = {
     'scheduler': 'Yes'
 }
 
-loss_function = dice_loss
+loss_function = bce_loss
 
 print(f"Created a new Dataset for training of length: {len(ph2_train)}")
 print(f"Created a new Dataset for validation of length: {len(ph2_val)}")
