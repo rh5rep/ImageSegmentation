@@ -227,7 +227,7 @@ summary(model, (3, 256, 256))
 
 print("Current working directory:", os.getcwd())
 
-run_dir = "Torch_model"
+run_dir = "Results"
 os.makedirs(run_dir, exist_ok=True)
 
 
@@ -235,16 +235,17 @@ hyperparameters = {
     'batch size': 1, 
     'step size': 5, 
     'learning rate': 0.01, 
-    'epochs': 160, 
+    'epochs': 200, 
     'gamma': 0.5, 
     'momentum': 0.8, 
     'optimizer': 'Adam', 
     'number of classes': 2, 
     'device': 'cuda', 
     'image size': (256, 256), 
-    'backbone': 'SimpleEncDec', 
+    'backbone': 'EncDec', 
     'torch home': 'TorchvisionModels', 
-    'network name': 'Test-0', 
+    'network name': 'LongRun', 
+    'dataset': 'DRIVE',
     'beta1': 0.9, 
     'beta2': 0.999, 
     'epsilon': 1e-08, 
@@ -261,7 +262,8 @@ print(f"Created a new Dataset for testing of length: {len(drive_test)}")
 
 
 modeltype = hyperparameters['backbone']
-modeltype_directory = os.path.join(run_dir, f'{modeltype}')
+directory = os.path.join(run_dir, f'{hyperparameters['dataset']}')
+modeltype_directory = os.path.join(directory, f'{modeltype}')
 
 # Initialize model, optimizer, scheduler, logger, dataloader
 dataloader_train = DataLoader(
@@ -274,13 +276,13 @@ dataloader_test = DataLoader(
     drive_test, batch_size=1, shuffle=False, num_workers=hyperparameters["number of workers"], drop_last=False)
 print(f"Created a new Dataloader for testing with batch size: {hyperparameters['batch size']}")
 
-log_dir = os.path.join(modeltype_directory, f'{hyperparameters["network name"]}_{hyperparameters["optimizer"]}_Scheduler_{hyperparameters["scheduler"]}')
-os.makedirs(log_dir, exist_ok=True)
-logger = SummaryWriter(log_dir)
+# log_dir = os.path.join(modeltype_directory, f'{hyperparameters["network name"]}_{hyperparameters["optimizer"]}_Scheduler_{hyperparameters["scheduler"]}')
+os.makedirs(modeltype_directory, exist_ok=True)
+logger = SummaryWriter(modeltype_directory)
 
 
 accuracy = train_net(model, logger, hyperparameters, hyperparameters['backbone'], device,
-                             loss_function, dataloader_train, dataloader_validation, dataloader_test, log_dir)
+                             loss_function, dataloader_train, dataloader_validation, dataloader_test, modeltype_directory)
 
 
 
