@@ -234,7 +234,7 @@ hyperparameters = {
     'batch size': 8, 
     'step size': 5, 
     'learning rate': 0.001, 
-    'epochs': 200, 
+    'epochs': 100, 
     'gamma': 0.8, 
     'momentum': 0.9, 
     'optimizer': 'Adam', 
