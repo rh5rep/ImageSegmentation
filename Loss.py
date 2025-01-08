@@ -30,4 +30,8 @@ def focal_loss(y_real, y_pred, gamma_2=2.0):
     
     return torch.mean(focal_loss)
 
-# Test
+# Why are these not just the built in functions. For example:
+
+def bce_loss_pytorch(y_real, y_pred):
+    loss_fn = torch.nn.BCEWithLogitsLoss()
+    return loss_fn(y_pred, y_real)
